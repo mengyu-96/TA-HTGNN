@@ -1,3 +1,12 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:d3aa8c2f83149cfe97e2c817791e08bef3e1d43c24639c50574112af677b435f
-size 287
+FROM python:3.12
+
+WORKDIR /usr/src/app
+
+COPY APTnotes_async_requirements.txt ./
+COPY APTnotes_async_download.py ./
+COPY utilities.py ./
+
+RUN apt-get install -y libxslt1-dev
+RUN pip install -r APTnotes_async_requirements.txt
+
+ENTRYPOINT ["python", "APTnotes_async_download.py"]

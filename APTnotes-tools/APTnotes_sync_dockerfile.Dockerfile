@@ -1,3 +1,12 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:6f1d059dcd9a44e6dfcb94a83943a5648ecb9fd5ae95d167488393b94aad7d05
-size 278
+FROM python:3.12
+
+WORKDIR /usr/src/app
+
+COPY APTnotes_sync_requirements.txt ./
+COPY APTnotes_sync_download.py ./
+COPY utilities.py ./
+
+RUN apt-get install -y libxslt1-dev
+RUN pip install -r APTnotes_sync_requirements.txt
+
+CMD [ "python", "APTnotes_sync_download.py" ]

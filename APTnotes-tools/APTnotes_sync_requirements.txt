@@ -1,3 +1,4 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:a2e0476c5b0a8d96aad91d7e211ad4ea9c155f957985a83cd6f7c9ff262ff167
-size 77
+beautifulsoup4==4.12.2
+lxml==5.1.0
+python-magic==0.4.27
+requests==2.31.0
