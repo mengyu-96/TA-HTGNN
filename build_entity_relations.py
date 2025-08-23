@@ -3,7 +3,7 @@ import json
 import networkx as nx
 import matplotlib.pyplot as plt
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import dgl
 import torch
 import re
@@ -289,6 +289,7 @@ def build_heterogeneous_graph(entities_data):
     return G
 
 # 将NetworkX图转换为DGL异构图
+# 将NetworkX图转换为DGL异构图
 def convert_to_dgl_graph(nx_graph):
     # 为每种节点类型创建映射
     node_type_to_ids = {}
@@ -297,45 +298,117 @@ def convert_to_dgl_graph(nx_graph):
         if node_type not in node_type_to_ids:
             node_type_to_ids[node_type] = []
         node_type_to_ids[node_type].append(node)
-    
+
     # 为每种节点类型创建ID映射
     node_type_to_id_map = {}
     for node_type, nodes in node_type_to_ids.items():
         node_type_to_id_map[node_type] = {node: i for i, node in enumerate(nodes)}
-    
+
     # 为每种边类型创建边列表
     edge_type_to_edges = {}
     for src, dst, data in nx_graph.edges(data=True):
         edge_type = data.get('type')
         src_type = nx_graph.nodes[src].get('type')
         dst_type = nx_graph.nodes[dst].get('type')
-        
+
         if edge_type is None or src_type is None or dst_type is None:
             continue
-        
+
         edge_key = (src_type, edge_type, dst_type)
         if edge_key not in edge_type_to_edges:
             edge_type_to_edges[edge_key] = ([], [])
-        
+
         # 获取源节点和目标节点的ID
         src_id = node_type_to_id_map[src_type][src]
         dst_id = node_type_to_id_map[dst_type][dst]
-        
+
         # 添加边
         edge_type_to_edges[edge_key][0].append(src_id)
         edge_type_to_edges[edge_key][1].append(dst_id)
-    
+
     # 创建DGL异构图
     dgl_graph = dgl.heterograph(edge_type_to_edges)
-    
+
     # 添加节点特征（这里简单地使用节点ID作为特征）
     for node_type, id_map in node_type_to_id_map.items():
         num_nodes = len(id_map)
         # 创建一个简单的特征矩阵，每个节点用一个one-hot向量表示
         node_features = torch.eye(num_nodes)
         dgl_graph.nodes[node_type].data['feat'] = node_features
-    
+
     return dgl_graph, node_type_to_id_map
+
+
+# 将图按时间划分为多个快照
+def create_temporal_snapshots(nx_graph, num_snapshots=5):
+    # 获取所有带有时间戳的节点
+    timestamp_nodes = [node for node, data in nx_graph.nodes(data=True) if data.get('type') == 'timestamp']
+
+    # 解析时间戳并排序
+    timestamps = [datetime.strptime(ts, "%Y-%m-%d") for ts in timestamp_nodes]
+    sorted_timestamps = sorted(timestamps)
+
+    if not sorted_timestamps:
+        return []
+
+    # 计算时间范围
+    min_time = sorted_timestamps[0]
+    max_time = sorted_timestamps[-1]
+    time_range = (max_time - min_time).days
+
+    # 计算每个快照的时间间隔
+    interval = time_range / num_snapshots
+
+    # 创建快照
+    snapshots = []
+    for i in range(num_snapshots):
+        # 计算快照的时间范围
+        start_time = min_time + timedelta(days=i * interval)
+        end_time = min_time + timedelta(days=(i + 1) * interval)
+
+        # 筛选在该时间范围内的时间戳节点
+        snapshot_timestamps = [ts.strftime("%Y-%m-%d") for ts in sorted_timestamps
+                               if start_time <= ts < end_time]
+
+        # 创建子图
+        subgraph = nx.DiGraph()
+
+        # 添加时间戳节点及其关联的报告节点
+        for ts in snapshot_timestamps:
+            subgraph.add_node(ts, type='timestamp')
+            # 获取与该时间戳相关的报告
+            for pred in nx_graph.predecessors(ts):
+                if nx_graph.nodes[pred].get('type') == 'report':
+                    # 添加报告节点
+                    subgraph.add_node(pred, **nx_graph.nodes[pred])
+                    # 添加报告到时间戳的边
+                    subgraph.add_edge(pred, ts, type='timestamp_of_report')
+
+                    # 添加报告关联的所有实体节点和边
+                    for succ in nx_graph.successors(pred):
+                        node_type = nx_graph.nodes[succ].get('type')
+                        if node_type in ['ip', 'domain', 'hash', 'file']:
+                            # 添加实体节点
+                            subgraph.add_node(succ, **nx_graph.nodes[succ])
+                            # 添加报告到实体的边
+                            edge_type = f'report_contains_{node_type}'
+                            subgraph.add_edge(pred, succ, type=edge_type)
+
+        # 添加实体之间的关联边
+        for node in subgraph.nodes():
+            if node in nx_graph:
+                for succ in nx_graph.successors(node):
+                    if succ in subgraph and nx_graph.nodes[succ].get('type') != 'timestamp':
+                        edge_data = nx_graph.get_edge_data(node, succ)
+                        if edge_data and 'type' in edge_data:
+                            subgraph.add_edge(node, succ, **edge_data)
+
+        # 将子图转换为DGL图并添加到快照列表
+        if subgraph.number_of_nodes() > 0:
+            dgl_subgraph, _ = convert_to_dgl_graph(subgraph)
+            snapshots.append(dgl_subgraph)
+
+    return snapshots
 
 # 将图按时间划分为多个快照
 def create_temporal_snapshots(nx_graph, num_snapshots=5):
@@ -409,9 +482,14 @@ def create_temporal_snapshots(nx_graph, num_snapshots=5):
     return snapshots
 
 # 可视化图
+# 可视化图
 def visualize_graph(graph, title="APT实体关系图", output_file="apt_graph.png"):
     plt.figure(figsize=(15, 12))
-    
+
+    # 设置中文字体支持
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'FangSong', 'Microsoft YaHei', 'DejaVu Sans']
+    plt.rcParams['axes.unicode_minus'] = False
+
     # 为不同类型的节点设置不同的颜色
     color_map = {
         'report': 'red',
@@ -425,27 +503,32 @@ def visualize_graph(graph, title="APT实体关系图", output_file="apt_graph.pn
         'user': 'pink',
         'attack_stage': 'black'
     }
-    
+
     # 获取节点颜色
     node_colors = [color_map.get(graph.nodes[node].get('type'), 'gray') for node in graph.nodes()]
-    
+
     # 使用spring布局
-    pos = nx.spring_layout(graph, seed=42)
-    
+    pos = nx.spring_layout(graph, seed=42, k=0.5)
+
     # 绘制节点
-    nx.draw_networkx_nodes(graph, pos, node_color=node_colors, alpha=0.8, node_size=80)
-    
-    # 绘制边
-    nx.draw_networkx_edges(graph, pos, alpha=0.4, arrows=True, width=0.5)
-    
+    nx.draw_networkx_nodes(graph, pos, node_color=node_colors, alpha=0.8, node_size=50)
+
+    # 绘制边（减少箭头大小以提高性能）
+    nx.draw_networkx_edges(graph, pos, alpha=0.3, arrows=True, arrowsize=10, width=0.3)
+
     # 添加标题
-    plt.title(title)
-    
-    # 添加图例
+    plt.title(title, fontsize=16)
+
+    # 添加图例（固定位置以提高性能）
+    legend_elements = []
     for node_type, color in color_map.items():
-        plt.plot([], [], 'o', color=color, label=node_type)
-    plt.legend()
-    
+        legend_elements.append(plt.Line2D([0], [0], marker='o', color='w',
+                                          markerfacecolor=color, markersize=8, label=node_type))
+    plt.legend(handles=legend_elements, loc='upper right')
+
+    # 关闭坐标轴
+    plt.axis('off')
+
     # 保存图像
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     plt.close()
