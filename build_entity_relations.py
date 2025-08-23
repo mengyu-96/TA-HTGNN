@@ -452,15 +452,15 @@ def visualize_graph(graph, title="APT实体关系图", output_file="apt_graph.pn
 
 # 主函数
 def main():
-    print("加载实体数据...")
+    print("加载实体数据... - build_entity_relations.py:455")
     entities_data = load_entities()
     
-    print(f"共加载了 {len(entities_data)} 个报告的实体数据")
+    print(f"共加载了 {len(entities_data)} 个报告的实体数据 - build_entity_relations.py:458")
     
-    print("构建异构图...")
+    print("构建异构图... - build_entity_relations.py:460")
     nx_graph = build_heterogeneous_graph(entities_data)
     
-    print(f"图构建完成，包含 {nx_graph.number_of_nodes()} 个节点和 {nx_graph.number_of_edges()} 条边")
+    print(f"图构建完成，包含 {nx_graph.number_of_nodes()} 个节点和 {nx_graph.number_of_edges()} 条边 - build_entity_relations.py:463")
     
     # 统计各类型节点的数量
     node_type_counts = {}
@@ -468,9 +468,9 @@ def main():
         node_type = data.get('type', 'unknown')
         node_type_counts[node_type] = node_type_counts.get(node_type, 0) + 1
     
-    print("节点类型统计:")
+    print("节点类型统计: - build_entity_relations.py:471")
     for node_type, count in node_type_counts.items():
-        print(f"  {node_type}: {count}")
+        print(f"{node_type}: {count} - build_entity_relations.py:473")
     
     # 统计各类型边的数量
     edge_type_counts = {}
@@ -478,28 +478,28 @@ def main():
         edge_type = data.get('type', 'unknown')
         edge_type_counts[edge_type] = edge_type_counts.get(edge_type, 0) + 1
     
-    print("边类型统计:")
+    print("边类型统计: - build_entity_relations.py:481")
     for edge_type, count in edge_type_counts.items():
-        print(f"  {edge_type}: {count}")
+        print(f"{edge_type}: {count} - build_entity_relations.py:483")
     
-    print("可视化图...")
+    print("可视化图... - build_entity_relations.py:485")
     visualize_graph(nx_graph)
     
-    print("转换为DGL异构图...")
+    print("转换为DGL异构图... - build_entity_relations.py:488")
     dgl_graph, node_maps = convert_to_dgl_graph(nx_graph)
     
-    print("创建时序快照...")
+    print("创建时序快照... - build_entity_relations.py:491")
     snapshots = create_temporal_snapshots(nx_graph)
     
-    print(f"创建了 {len(snapshots)} 个时序快照")
+    print(f"创建了 {len(snapshots)} 个时序快照 - build_entity_relations.py:494")
     
     # 保存DGL图
     if snapshots:
-        print("保存时序异构图...")
+        print("保存时序异构图... - build_entity_relations.py:498")
         dgl.save_graphs(output_graph_file, snapshots)
-        print(f"时序异构图已保存到 {output_graph_file}")
+        print(f"时序异构图已保存到 {output_graph_file} - build_entity_relations.py:500")
     else:
-        print("警告: 没有创建任何时序快照，可能是因为缺少时间信息")
+        print("警告: 没有创建任何时序快照，可能是因为缺少时间信息 - build_entity_relations.py:502")
 
 if __name__ == "__main__":
     main()
