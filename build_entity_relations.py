@@ -1,12 +1,18 @@
+import math
 import os
 import json
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta  # 正确导入 timedelta
 import dgl
 import torch
 import re
+
+# 设置中文字体
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 # 文件路径
 reports_entities_file = "APTnotes-tools/reports_entities.jsonl"
@@ -361,9 +367,9 @@ def create_temporal_snapshots(nx_graph, num_snapshots=5):
     snapshots = []
     for i in range(num_snapshots):
         # 计算快照的时间范围
-        start_time = min_time + datetime.timedelta(days=i * interval)
-        end_time = min_time + datetime.timedelta(days=(i + 1) * interval)
-        
+        start_time = min_time + timedelta(days=int(i * interval))  # 修改这里，直接使用 timedelta
+        end_time = min_time + timedelta(days=int((i + 1) * interval))  # 修改这里，直接使用 timedelta
+
         # 筛选在该时间范围内的时间戳节点
         snapshot_timestamps = [ts.strftime("%Y-%m-%d") for ts in sorted_timestamps 
                               if start_time <= ts < end_time]
@@ -409,9 +415,16 @@ def create_temporal_snapshots(nx_graph, num_snapshots=5):
     return snapshots
 
 # 可视化图
-def visualize_graph(graph, title="APT实体关系图", output_file="apt_graph.png"):
+def visualize_graph(graph, output_file="apt_graph.png", title="APT实体关系图", max_nodes=1000):
+    # 如果节点数量过多，进行采样
+    if graph.number_of_nodes() > max_nodes:
+        print(f"节点数量({graph.number_of_nodes()})超过{max_nodes}，进行随机采样...")
+        sampled_nodes = list(graph.nodes())[:max_nodes]
+        graph = graph.subgraph(sampled_nodes)
+
+    print("开始绘制图...")
     plt.figure(figsize=(15, 12))
-    
+
     # 为不同类型的节点设置不同的颜色
     color_map = {
         'report': 'red',
@@ -425,30 +438,47 @@ def visualize_graph(graph, title="APT实体关系图", output_file="apt_graph.pn
         'user': 'pink',
         'attack_stage': 'black'
     }
-    
-    # 获取节点颜色
-    node_colors = [color_map.get(graph.nodes[node].get('type'), 'gray') for node in graph.nodes()]
-    
-    # 使用spring布局
-    pos = nx.spring_layout(graph, seed=42)
-    
-    # 绘制节点
-    nx.draw_networkx_nodes(graph, pos, node_color=node_colors, alpha=0.8, node_size=80)
-    
-    # 绘制边
-    nx.draw_networkx_edges(graph, pos, alpha=0.4, arrows=True, width=0.5)
-    
-    # 添加标题
-    plt.title(title)
-    
-    # 添加图例
+
+    print("计算节点布局...")
+    # 使用更快的布局算法，增加iterations参数来控制计算量
+    pos = nx.spring_layout(graph, k=1/math.sqrt(graph.number_of_nodes()),
+                          iterations=50, seed=42)
+
+    print("绘制节点...")
+    # 批量绘制节点，按类型分组绘制可以提高效率
     for node_type, color in color_map.items():
-        plt.plot([], [], 'o', color=color, label=node_type)
-    plt.legend()
-    
-    # 保存图像
+        node_list = [node for node in graph.nodes()
+                    if graph.nodes[node].get('type') == node_type]
+        if node_list:
+            nx.draw_networkx_nodes(graph, pos,
+                                 nodelist=node_list,
+                                 node_color=color,
+                                 alpha=0.8,
+                                 node_size=80,
+                                 label=node_type)
+
+    print("绘制边...")
+    # 简化边的绘制，减少视觉元素
+    nx.draw_networkx_edges(graph, pos,
+                          alpha=0.2,
+                          arrows=False,  # 移除箭头以提高性能
+                          width=0.5)
+
+    plt.title(title)
+
+    # 简化图例
+    legend_elements = [plt.Line2D([0], [0], marker='o', color='w',
+                                 markerfacecolor=color,
+                                 markersize=10,
+                                 label=node_type)
+                      for node_type, color in color_map.items()]
+    plt.legend(handles=legend_elements, loc='upper right', ncol=2)  # 使用2列显示图例
+
+    print(f"保存图像到 {output_file}...")
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
     plt.close()
+    print("图像保存完成!")
+
 
 # 主函数
 def main():
@@ -483,8 +513,9 @@ def main():
         print(f"{edge_type}: {count} - build_entity_relations.py:483")
     
     print("可视化图... - build_entity_relations.py:485")
-    visualize_graph(nx_graph)
-    
+    # 添加最大节点数限制
+    visualize_graph(nx_graph, max_nodes=1000)
+
     print("转换为DGL异构图... - build_entity_relations.py:488")
     dgl_graph, node_maps = convert_to_dgl_graph(nx_graph)
     
