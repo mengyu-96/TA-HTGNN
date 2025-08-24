@@ -11,7 +11,7 @@
 
 - **实体关系构建**：从APT报告中提取IP地址、域名、哈希值、文件路径等实体，并构建它们之间的关系
 - **时序图生成**：基于时间戳信息，将实体关系组织成时序图，反映APT活动的演变过程
-- **数据集整合**：将APTnotes数据集与Linux APT数据集整合，形成更全面的APT活动视图
+
 - **模型适配**：适配HTGNN模型，使其能够处理APT时序异构图数据
 - **可视化分析**：提供图形化展示，直观呈现实体关系和分析结果
 
@@ -19,7 +19,7 @@
 
 ```
 .
-├── APTnotes-tools/                # APT报告实体提取工具
+
 │   ├── extract_entities.py        # 实体提取脚本
 │   └── reports_entities.jsonl     # 提取的实体数据
 ├── HTGNN/                         # HTGNN模型实现
@@ -143,7 +143,7 @@ python adapt_htgnn_model.py
 
 ## 注意事项
 
-- 确保数据文件路径正确，特别是`APTnotes-tools/reports_entities.jsonl`和`Linux-APT-Dataset/Linux-APT-Dataset-2024/combine.csv`
+- 确保数据文件路径正确，特别是`Linux-APT-Dataset/Linux-APT-Dataset-2024/combine.csv`
 - 对于大型数据集，可能需要调整模型参数以获得更好的性能
 - 时序图生成依赖于数据中的时间戳信息，如果时间信息不足，可能会影响结果
 

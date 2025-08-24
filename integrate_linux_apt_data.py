@@ -10,7 +10,6 @@ import re
 
 # 文件路径
 linux_apt_csv = "Linux-APT-Dataset/Linux-APT-Dataset-2024/combine.csv"
-reports_entities_file = "APTnotes-tools/reports_entities.jsonl"
 output_graph_file = "integrated_apt_temporal_graph.bin"
 
 # 定义节点类型
@@ -287,110 +286,6 @@ def build_linux_apt_graph(df):
     sorted_stages = sorted(attack_stages, key=lambda x: attack_stage_order.get(x, 999))
     for i in range(len(sorted_stages) - 1):
         G.add_edge(sorted_stages[i], sorted_stages[i+1], type='attack_stage_follows')
-    
-    return G
-
-# 加载APTnotes实体数据
-def load_apt_entities():
-    entities_data = []
-    try:
-        with open(reports_entities_file, 'r', encoding='utf-8') as f:
-            for line in f:
-                entities_data.append(json.loads(line))
-        print(f"成功加载APTnotes实体数据，共{len(entities_data)}个报告")
-        return entities_data
-    except Exception as e:
-        print(f"加载APTnotes实体数据失败: {e}")
-        return []
-
-# 构建APTnotes实体图
-def build_apt_entities_graph(entities_data):
-    G = nx.DiGraph()
-    
-    # 添加报告节点
-    for i, report in enumerate(entities_data):
-        report_name = report['report_name']
-        G.add_node(report_name, type='report', id=i)
-        
-        # 提取报告时间
-        timestamps = report['entities']['timestamps']
-        if timestamps:
-            # 解析所有时间戳
-            parsed_timestamps = [parse_timestamp(ts) for ts in timestamps]
-            # 过滤掉无法解析的时间戳
-            valid_timestamps = [ts for ts in parsed_timestamps if ts is not None]
-            
-            if valid_timestamps:
-                # 使用最早的时间戳作为报告时间
-                report_time = min(valid_timestamps)
-                time_str = report_time.strftime("%Y-%m-%d")
-                # 添加时间戳节点（如果不存在）
-                if time_str not in G:
-                    G.add_node(time_str, type='timestamp')
-                # 添加报告与时间戳的边
-                G.add_edge(report_name, time_str, type='timestamp_of_report')
-        
-        # 添加IP节点和边
-        for ip in report['entities']['ips']:
-            if ip not in G:
-                G.add_node(ip, type='ip')
-            G.add_edge(report_name, ip, type='report_contains_ip')
-        
-        # 添加域名节点和边
-        for domain in report['entities']['domains']:
-            if domain not in G:
-                G.add_node(domain, type='domain')
-            G.add_edge(report_name, domain, type='report_contains_domain')
-        
-        # 添加哈希节点和边
-        for hash_value in report['entities']['hashes']:
-            if hash_value not in G:
-                G.add_node(hash_value, type='hash')
-            G.add_edge(report_name, hash_value, type='report_contains_hash')
-        
-        # 添加文件节点和边
-        for file_path in report['entities']['files']:
-            if file_path not in G:
-                G.add_node(file_path, type='file')
-            G.add_edge(report_name, file_path, type='report_contains_file')
-    
-    # 添加实体之间的关联边
-    for report in entities_data:
-        # 获取报告中的所有实体
-        ips = report['entities']['ips']
-        domains = report['entities']['domains']
-        hashes = report['entities']['hashes']
-        files = report['entities']['files']
-        
-        # 添加IP与域名的关联
-        for ip in ips:
-            for domain in domains:
-                G.add_edge(ip, domain, type='ip_appears_with_domain')
-        
-        # 添加IP与哈希的关联
-        for ip in ips:
-            for hash_value in hashes:
-                G.add_edge(ip, hash_value, type='ip_appears_with_hash')
-        
-        # 添加IP与文件的关联
-        for ip in ips:
-            for file_path in files:
-                G.add_edge(ip, file_path, type='ip_appears_with_file')
-        
-        # 添加域名与哈希的关联
-        for domain in domains:
-            for hash_value in hashes:
-                G.add_edge(domain, hash_value, type='domain_appears_with_hash')
-        
-        # 添加域名与文件的关联
-        for domain in domains:
-            for file_path in files:
-                G.add_edge(domain, file_path, type='domain_appears_with_file')
-        
-        # 添加哈希与文件的关联
-        for hash_value in hashes:
-            for file_path in files:
-                G.add_edge(hash_value, file_path, type='hash_appears_with_file')
     
     return G
 
@@ -774,24 +669,10 @@ def main():
     linux_graph = build_linux_apt_graph(linux_df)
     print(f"Linux APT图构建完成，包含{linux_graph.number_of_nodes()}个节点和{linux_graph.number_of_edges()}条边")
     
-    # 加载APTnotes实体数据
-    apt_entities = load_apt_entities()
-    if not apt_entities:
-        print("警告: APTnotes实体数据加载失败，将只使用Linux APT数据")
-        merged_graph = linux_graph
-    else:
-        # 构建APTnotes实体图
-        print("构建APTnotes实体图...")
-        apt_graph = build_apt_entities_graph(apt_entities)
-        print(f"APTnotes实体图构建完成，包含{apt_graph.number_of_nodes()}个节点和{apt_graph.number_of_edges()}条边")
-        
-        # 合并两个图
-        print("合并两个图...")
-        merged_graph = merge_graphs(apt_graph, linux_graph)
-        print(f"合并后的图包含{merged_graph.number_of_nodes()}个节点和{merged_graph.number_of_edges()}条边")
+    merged_graph = linux_graph
     
     # 统计各类型节点的数量
-    node_type_counts = {}
+    node_type_counts = {
     for _, data in merged_graph.nodes(data=True):
         node_type = data.get('type', 'unknown')
         node_type_counts[node_type] = node_type_counts.get(node_type, 0) + 1

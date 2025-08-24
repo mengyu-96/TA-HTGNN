@@ -26,6 +26,8 @@ class ModelConfig:
         self.epochs = 100
         self.patience = 10
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.time_aware = True  # 启用时间感知功能
+        self.temporal_embedding_dim = 16  # 时间嵌入维度
 
 # 加载时序异构图
 def load_temporal_graph():
@@ -106,6 +108,11 @@ def build_model(graphs, node_types, edge_types, config):
             in_dims[ntype] = graphs[0].nodes[ntype].data['feat'].shape[1]
         else:
             in_dims[ntype] = config.hidden_dim
+    
+    # 如果启用时间感知功能，调整输入维度
+    if config.time_aware:
+        for ntype in in_dims:
+            in_dims[ntype] += config.temporal_embedding_dim
     
     # 创建HTGNN模型
     model = HTGNN(
